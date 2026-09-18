@@ -1,0 +1,9 @@
+{
+  "name": "給料管理",
+  "short_name": "給料管理",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#111111",
+  "icons": []
+}

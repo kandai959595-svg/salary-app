@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<title>給料管理</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans JP",sans-serif;background:#f5f5f5;color:#222}
+header{background:#111;color:#fff;padding:22px 16px;text-align:center;position:sticky;top:0;z-index:10}header h1{margin:0;font-size:24px}header p{margin:5px 0 0;opacity:.7;font-size:12px}
+main{max-width:900px;margin:auto;padding:15px}.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 3px 15px rgba(0,0,0,.07)}
+h2{margin:0 0 15px;font-size:19px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input,select,button{width:100%;padding:12px;border-radius:9px;border:1px solid #ccc;font-size:15px;margin-top:5px;margin-bottom:10px}
+button{background:#111;color:#fff;border:0;font-weight:bold;cursor:pointer}.red{background:#d33}.gray{background:#666}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{background:#f3f3f3;border-radius:12px;padding:15px 8px;text-align:center}.stat span{display:block;color:#666;font-size:12px}.stat strong{display:block;font-size:20px;margin-top:5px}
+.big,.salary{font-size:21px;font-weight:bold;margin-top:7px}.small{color:#777;font-size:13px}.night{color:#8a4b00}.progress{height:18px;background:#ddd;border-radius:20px;overflow:hidden}.progress div{height:100%;background:#111}
+.job,.shift,.month{border:1px solid #ddd;border-radius:12px;padding:14px;margin-bottom:10px}.empty{color:#777;text-align:center;padding:20px}hr{border:0;border-top:1px solid #eee;margin:15px 0}
+canvas{width:100%;height:260px;border:1px solid #eee;border-radius:10px}
+.install{display:none;background:#fff;padding:12px;border-radius:12px;margin-bottom:16px;box-shadow:0 3px 12px rgba(0,0,0,.08)}.install button{margin-bottom:0}
+@media(max-width:600px){.grid,.stats{grid-template-columns:1fr}.card{padding:15px}main{padding:10px}}
+</style>
+</head>
+<body>
+<header><h1>💰 給料管理</h1><p>バイト収入をまとめて管理</p></header>
+<main>
+<div class="install" id="installBox"><b>📱 このアプリをスマホに入れる</b><p class="small">ブラウザの「ホーム画面に追加」からアプリとして使えるで。</p><button id="installBtn">ホーム画面に追加</button></div>
+
+<div class="card"><h2>📊 ダッシュボード</h2><div class="stats">
+<div class="stat"><span>今月</span><strong id="monthTotal">0円</strong></div>
+<div class="stat"><span>今年</span><strong id="yearTotal">0円</strong></div>
+<div class="stat"><span>勤務回数</span><strong id="shiftCount">0回</strong></div>
+</div><br><label>確認する月</label><input type="month" id="monthSelect"><div id="targetBox"></div></div>
+
+<div class="card"><h2>📈 月別給与</h2><canvas id="chart"></canvas></div>
+
+<div class="card"><h2>🏢 勤務先</h2><input id="jobName" placeholder="勤務先名（例：ZARA）"><input id="jobWage" type="number" placeholder="時給（例：1400）"><button onclick="addJob()">＋ 勤務先を追加</button><div id="jobs"></div></div>
+
+<div class="card"><h2>📝 シフト登録</h2><label>勤務先</label><select id="jobSelect"></select><div class="grid">
+<div><label>日付</label><input type="date" id="date"></div><div><label>開始時刻</label><input type="time" id="start"></div>
+<div><label>終了時刻</label><input type="time" id="end"></div><div><label>休憩（分）</label><input type="number" id="breakTime" value="0"></div>
+</div><label>交通費</label><input type="number" id="transport" value="0"><div id="preview"></div><button onclick="addShift()">＋ シフトを登録</button></div>
+
+<div class="card"><h2>🧾 給与明細</h2><div id="payslip"></div></div>
+<div class="card"><h2>🏢 勤務先別年間収入</h2><div id="jobSummary"></div></div>
+<div class="card"><h2>📅 シフト履歴</h2><div id="history"></div></div>
+
+<div class="card"><h2>⚙️ 設定</h2><label>年間目標額</label><input type="number" id="yearLimit"><button onclick="saveLimit()">年間目標を保存</button><p class="small">※年間目標は収入管理用の目安です。</p></div>
+</main>
+
+<script>
+let jobs=JSON.parse(localStorage.getItem("salaryJobs")||"[]");
+let shifts=JSON.parse(localStorage.getItem("salaryShifts6")||localStorage.getItem("salaryShifts5")||localStorage.getItem("salaryShifts4")||"[]");
+let yearLimit=Number(localStorage.getItem("salaryYearLimit6"))||1360000;
+const now=new Date(), pad=n=>String(n).padStart(2,"0");
+document.getElementById("date").value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+document.getElementById("monthSelect").value=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+document.getElementById("yearLimit").value=yearLimit;
+function save(){localStorage.setItem("salaryJobs",JSON.stringify(jobs));localStorage.setItem("salaryShifts6",JSON.stringify(shifts));localStorage.setItem("salaryYearLimit6",yearLimit)}
+function addJob(){let name=document.getElementById("jobName").value.trim(),wage=Number(document.getElementById("jobWage").value);if(!name||wage<=0)return alert("勤務先名と時給を入力してな！");jobs.push({id:Date.now(),name,wage});document.getElementById("jobName").value="";document.getElementById("jobWage").value="";save();render()}
+function deleteJob(id){if(shifts.some(s=>s.jobId===id))return alert("シフト履歴がある勤務先は削除できません。");if(confirm("この勤務先を削除する？")){jobs=jobs.filter(j=>j.id!==id);save();render()}}
+function editWage(id){let j=jobs.find(x=>x.id===id),w=Number(prompt(j.name+" の新しい時給",j.wage));if(w>0){j.wage=w;save();render()}}
+function toMin(t){let [h,m]=t.split(":").map(Number);return h*60+m}
+function calc(start,end,br){let s=toMin(start),e=toMin(end);if(e<=s)e+=1440;let total=Math.max(0,e-s-br),night=0;for(let i=s;i<e;i++){let x=i%1440;if(x>=1320||x<300)night++}night=Math.min(night,total);return{total,night}}
+function salary(j,start,end,br,tr){let w=calc(start,end,br),normal=w.total-w.night,np=Math.floor(normal/60*j.wage),nP=Math.floor(w.night/60*j.wage*1.25);return{total:w.total,night:w.night,normalPay:np,nightPay:nP,salary:np+nP+tr}}
+function fmt(min){let h=Math.floor(min/60),m=min%60;return h?`${h}時間${m}分`:`${m}分`}
+function preview(){let j=jobs.find(x=>x.id===Number(document.getElementById("jobSelect").value)),s=document.getElementById("start").value,e=document.getElementById("end").value;if(!j||!s||!e){document.getElementById("preview").innerHTML="";return}let r=salary(j,s,e,Number(document.getElementById("breakTime").value)||0,Number(document.getElementById("transport").value)||0);document.getElementById("preview").innerHTML=`<div class="job"><b>💡 給料予想</b><br><br>勤務時間：${fmt(r.total)}<br>通常勤務：${fmt(r.total-r.night)}<br>深夜勤務：<span class="night">${fmt(r.night)}</span><br><br>通常分：${r.normalPay.toLocaleString()}円<br>深夜分：${r.nightPay.toLocaleString()}円<div class="salary">合計 ${r.salary.toLocaleString()}円</div></div>`}
+function addShift(){let jobId=Number(document.getElementById("jobSelect").value),j=jobs.find(x=>x.id===jobId),date=document.getElementById("date").value,s=document.getElementById("start").value,e=document.getElementById("end").value,br=Number(document.getElementById("breakTime").value)||0,tr=Number(document.getElementById("transport").value)||0;if(!j||!date||!s||!e)return alert("勤務先・日付・開始・終了を入力してな！");let r=salary(j,s,e,br,tr);shifts.push({id:Date.now(),jobId,date,start:s,end:e,breakTime:br,transport:tr,workMinutes:r.total,nightMinutes:r.night,normalPay:r.normalPay,nightPay:r.nightPay,salary:r.salary});save();render();document.getElementById("start").value="";document.getElementById("end").value="";alert("シフト登録完了！🔥")}
+function deleteShift(id){if(confirm("このシフトを削除する？")){shifts=shifts.filter(s=>s.id!==id);save();render()}}
+function editShift(id){let s=shifts.find(x=>x.id===id);if(!s)return;document.getElementById("jobSelect").value=s.jobId;document.getElementById("date").value=s.date;document.getElementById("start").value=s.start;document.getElementById("end").value=s.end;document.getElementById("breakTime").value=s.breakTime;document.getElementById("transport").value=s.transport;shifts=shifts.filter(x=>x.id!==id);save();render();window.scrollTo({top:500,behavior:"smooth"})}
+function renderJobs(){let b=document.getElementById("jobs"),sel=document.getElementById("jobSelect");b.innerHTML="";sel.innerHTML="";jobs.forEach(j=>{b.innerHTML+=`<div class="job"><b>${esc(j.name)}</b><br>時給：${j.wage.toLocaleString()}円<br><br><button class="gray" onclick="editWage(${j.id})">時給変更</button><button class="red" onclick="deleteJob(${j.id})">削除</button></div>`;let o=document.createElement("option");o.value=j.id;o.textContent=`${j.name}（${j.wage}円）`;sel.appendChild(o)})}
+function renderDashboard(){let m=document.getElementById("monthSelect").value,y=m.slice(0,4),ms=shifts.filter(s=>s.date.startsWith(m)),ys=shifts.filter(s=>s.date.startsWith(y)),mt=ms.reduce((a,s)=>a+s.salary,0),yt=ys.reduce((a,s)=>a+s.salary,0),p=yearLimit?Math.min(yt/yearLimit*100,100):0;document.getElementById("monthTotal").textContent=mt.toLocaleString()+"円";document.getElementById("yearTotal").textContent=yt.toLocaleString()+"円";document.getElementById("shiftCount").textContent=ms.length+"回";document.getElementById("targetBox").innerHTML=`<hr><b>🎯 年間目標</b><p>${yt.toLocaleString()}円 / ${yearLimit.toLocaleString()}円</p><div class="progress"><div style="width:${p}%"></div></div><p class="small">${p.toFixed(1)}% 到達 ／ 残り ${Math.max(yearLimit-yt,0).toLocaleString()}円</p>`}
+function renderPayslip(){let m=document.getElementById("monthSelect").value,l=shifts.filter(s=>s.date.startsWith(m)),b=document.getElementById("payslip");if(!l.length)return b.innerHTML='<div class="empty">この月のシフトはないで！</div>';let n=0,np=0,tr=0,t=0,min=0;l.forEach(s=>{n+=s.normalPay;np+=s.nightPay;tr+=s.transport;t+=s.salary;min+=s.workMinutes});b.innerHTML=`<div class="month"><b>${m} 給与明細</b><hr>勤務回数：${l.length}回<br>勤務時間：${fmt(min)}<br><br>通常勤務：${n.toLocaleString()}円<br>深夜勤務：${np.toLocaleString()}円<br>交通費：${tr.toLocaleString()}円<hr><div class="big">支給合計 ${t.toLocaleString()}円</div></div>`}
+function renderJobSummary(){let y=document.getElementById("monthSelect").value.slice(0,4),b=document.getElementById("jobSummary");b.innerHTML="";jobs.forEach(j=>{let l=shifts.filter(s=>s.jobId===j.id&&s.date.startsWith(y)),t=l.reduce((a,s)=>a+s.salary,0);b.innerHTML+=`<div class="job"><b>${esc(j.name)}</b><br>${l.length}回勤務<div class="salary">${t.toLocaleString()}円</div></div>`})}
+function renderHistory(){let b=document.getElementById("history"),l=[...shifts].sort((a,b)=>b.date.localeCompare(a.date));if(!l.length)return b.innerHTML='<div class="empty">まだシフトがないで！</div>';b.innerHTML=l.map(s=>{let j=jobs.find(x=>x.id===s.jobId);return `<div class="shift"><b>${esc(s.date)}　${esc(j?j.name:"不明")}</b><br><br><span class="small">${s.start}〜${s.end} ／休憩${s.breakTime}分</span><br>勤務時間：${fmt(s.workMinutes)}<br>深夜：${fmt(s.nightMinutes)}<br>交通費：${s.transport.toLocaleString()}円<div class="salary">${s.salary.toLocaleString()}円</div><button class="gray" onclick="editShift(${s.id})">編集</button><button class="red" onclick="deleteShift(${s.id})">削除</button></div>`}).join("")}
+function drawChart(){let c=document.getElementById("chart"),ctx=c.getContext("2d"),w=c.clientWidth,dpr=devicePixelRatio||1;c.width=w*dpr;c.height=260*dpr;ctx.scale(dpr,dpr);let y=document.getElementById("monthSelect").value.slice(0,4),v=Array.from({length:12},(_,i)=>shifts.filter(s=>s.date.startsWith(y+"-"+pad(i+1))).reduce((a,s)=>a+s.salary,0)),max=Math.max(...v,1),left=35,bottom=30,gw=w-left-10,bw=(gw-55)/12;ctx.clearRect(0,0,w,260);ctx.beginPath();ctx.moveTo(left,20);ctx.lineTo(left,230);ctx.lineTo(w-10,230);ctx.stroke();v.forEach((x,i)=>{let h=x/max*190,xx=left+i*bw+2;ctx.fillRect(xx,230-h,bw-6,h);ctx.font="10px Arial";ctx.textAlign="center";ctx.fillText(i+1+"月",xx+(bw-6)/2,250);if(x)ctx.fillText(Math.round(x/1000)+"k",xx+(bw-6)/2,225-h)})}
+function esc(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}
+function saveLimit(){yearLimit=Number(document.getElementById("yearLimit").value);if(!yearLimit)return alert("年間目標を入力してな！");save();render();alert("保存したで！")}
+function render(){renderJobs();renderDashboard();renderPayslip();renderJobSummary();renderHistory();preview();drawChart()}
+["jobSelect","start","end","breakTime","transport"].forEach(id=>["input","change"].forEach(ev=>document.getElementById(id).addEventListener(ev,preview)));
+document.getElementById("monthSelect").addEventListener("change",render);addEventListener("resize",drawChart);render();
+
+let deferredPrompt;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;document.getElementById("installBox").style.display="block"});
+document.getElementById("installBtn").addEventListener("click",async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else alert("ブラウザのメニューから「アプリとしてインストール」または「ホーム画面に追加」を選んでな！")});
+if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));
+</script>
+</body>
+</html>
